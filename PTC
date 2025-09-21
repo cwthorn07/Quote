@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pet Shipping Quote Calculator</title>
+  <style>
+    /* Base Styling */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f2f2f2;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 90%;
+      max-width: 800px;
+      background: #fff;
+      margin: 20px;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #007BFF;
+    }
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: space-between;
+    }
+    .form-group {
+      flex: 1 1 45%;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input[type="text"],
+    input[type="number"] {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1em;
+    }
+    button {
+      flex: 1 1 100%;
+      padding: 12px;
+      background-color: #007BFF;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 1em;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e9ecef;
+      border-radius: 8px;
+    }
+    @media (max-width: 600px) {
+      form {
+        flex-direction: column;
+      }
+      .form-group {
+        flex: 1 1 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Pet Shipping Quote Calculator</h1>
+    <form id="quoteForm">
+      <div class="form-group">
+        <label for="origin">Origin:</label>
+        <input type="text" id="origin" placeholder="Enter origin (e.g., city, address)" required>
+      </div>
+      <div class="form-group">
+        <label for="destination">Destination:</label>
+        <input type="text" id="destination" placeholder="Enter destination (e.g., city, address)" required>
+      </div>
+      <button type="button" onclick="calculateQuote()">Get Quote</button>
+    </form>
+    <div class="result" id="result" style="display:none;"></div>
+  </div>
+  
+  <script>
+    // Constants for calculations
+    const mpg = 27;             // Fuel efficiency (miles per gallon)
+    const dailyMiles = 700;     // Maximum miles driven per day
+    const dailyHours = 10;      // Maximum driving hours per day
+    const driverRate = 30;      // Cost per driving hour ($/hr)
+    const hotelRate = 125;      // Hotel cost per night ($)
+    const foodPerDay = 60;      // Food expense per day ($)
+
+    // Replace the following with your actual API keys:
+    const GOOGLE_MAPS_API_KEY = "AIzaSyEXAMPLE";  // Your Google Maps API key
+    const GAS_API_KEY = "GSTAGE12345";             // Your CollectAPI gas price API key
+    const HERTZ_API_KEY = "HERTZAPI12345";          // Your Hertz Car Rental API key
+
+    // Function to fetch route distance using Google Maps Distance Matrix API
+    async function getRouteDistance(origin, destination) {
+      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&key=${GOOGLE_MAPS_API_KEY}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.status === "OK" && data.rows[0].elements[0].status === "OK") {
+          // Convert distance from meters to miles (1 mile = 1609.34 meters)
+          const distanceMeters = data.rows[0].elements[0].distance.value;
+          return distanceMeters / 1609.34;
+        } else {
+          console.error("Error in route distance API response:", data);
+          return null;
+        }
+      } catch (error) {
+        console.error("Error fetching route distance:", error);
+        return null;
+      }
+    }
+
+    // Function to fetch live gas prices using CollectAPI (example endpoint for UT)
+    async function getGasPrice() {
+      const url = `https://api.collectapi.com/gasPrice/US?state=UT`;
+      try {
+        const response = await fetch(url, {
+          headers: {
+            "content-type": "application/json",
+            "authorization": `apikey ${GAS_API_KEY}`
+          }
+        });
+        const data = await response.json();
+        // Assume the API returns a structure where data.result.regular holds the current price.
+        if (data && data.result && data.result.regular) {
+          return parseFloat(data.result.regular);
+        } else {
+          console.error("Error in gas price API response:", data);
+          return 3.15; // Fallback gas price (USD)
+        }
+      } catch (error) {
+        console.error("Error fetching gas price:", error);
+        return 3.15; // Fallback gas price (USD)
+      }
+    }
+
+    // Function to fetch the current weekly rental rate for a 2024 Toyota RAV4 using Hertz Car Rental API
+    async function getRentalRate() {
+      const url = `https://api.hertz.com/v1/car-rental-rates?model=Toyota-RAV4&year=2024&apiKey=${HERTZ_API_KEY}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        // Assume the Hertz API returns an object with a 'weeklyRate' field.
+        if (data && data.weeklyRate) {
+          return parseFloat(data.weeklyRate);
+        } else {
+          console.error("Error in Hertz API response:", data);
+          return 700; // Fallback rental rate (USD)
+        }
+      } catch (error) {
+        console.error("Error fetching rental rate:", error);
+        return 700; // Fallback rental rate (USD)
+      }
+    }
+
+    // Main function that calculates the quote using dynamic API data
+    async function calculateQuote() {
+      // Retrieve origin and destination from the form inputs
+      const origin = document.getElementById('origin').value;
+      const destination = document.getElementById('destination').value;
+      if (!origin || !destination) {
+        alert("Please enter both origin and destination.");
+        return;
+      }
+
+      // Display a loading indicator
+      const resultDiv = document.getElementById('result');
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = "<p>Calculating quote... Please wait.</p>";
+
+      // Fetch dynamic data via APIs simultaneously
+      const [distance, gasPrice, rentalRate] = await Promise.all([
+        getRouteDistance(origin, destination),
+        getGasPrice(),
+        getRentalRate()
+      ]);
+
+      if (!distance) {
+        resultDiv.innerHTML = "<p>Error calculating route distance. Please check your inputs and API keys.</p>";
+        return;
+      }
+
+      // Calculate fuel cost
+      const gallonsNeeded = distance / mpg;
+      const fuelCost = gallonsNeeded * gasPrice;
+
+      // Calculate travel days based on the maximum of 700 miles per day
+      const fullDays = Math.floor(distance / dailyMiles);
+      const remainingMiles = distance % dailyMiles;
+      const totalDays = remainingMiles > 0 ? fullDays + 1 : fullDays;
+
+      // Calculate driving cost (max 10 hrs/day; proportionally calculate last day if not full)
+      let drivingCost = fullDays * dailyHours * driverRate;
+      if (remainingMiles > 0) {
+        const lastDayHours = (remainingMiles / dailyMiles) * dailyHours;
+        drivingCost += lastDayHours * driverRate;
+      }
+
+      // Calculate hotel cost (each overnight stay; i.e., totalDays - 1)
+      const hotelNights = totalDays > 1 ? totalDays - 1 : 0;
+      const hotelCost = hotelNights * hotelRate;
+
+      // Calculate food expense over the travel days
+      const foodCost = totalDays * foodPerDay;
+
+      // Calculate rental cost: Rental is based on a weekly rate (7-day period)
+      const weeks = Math.ceil(totalDays / 7);
+      const calculatedRentalCost = weeks * rentalRate;
+
+      // Compute the total quote
+      const totalQuote = fuelCost + drivingCost + hotelCost + foodCost + calculatedRentalCost;
+      
+      // Display an itemized breakdown of the quote
+      resultDiv.innerHTML = `
+        <h2>Quote Breakdown</h2>
+        <p><strong>Route Distance:</strong> ${distance.toFixed(2)} miles</p>
+        <p><strong>Total Days of Travel:</strong> ${totalDays} day(s)</p>
+        <p>
+          <strong>Fuel Cost:</strong> $${fuelCost.toFixed(2)} 
+          (Gallons needed: ${gallonsNeeded.toFixed(2)} at $${gasPrice.toFixed(2)}/gallon)
+        </p>
+        <p><strong>Driving Cost:</strong> $${drivingCost.toFixed(2)}</p>
+        <p>
+          <strong>Hotel Cost:</strong> $${hotelCost.toFixed(2)} 
+          (${hotelNights} night(s) at $${hotelRate.toFixed(2)}/night)
+        </p>
+        <p><strong>Food Cost:</strong> $${foodCost.toFixed(2)}</p>
+        <p>
+          <strong>Rental Cost:</strong> $${calculatedRentalCost.toFixed(2)} 
+          (${weeks} week(s) at $${rentalRate.toFixed(2)}/week)
+        </p>
+        <hr>
+        <h3>Total Quote: $${totalQuote.toFixed(2)}</h3>
+      `;
+    }
+  </script>
+</body>
+</html>
